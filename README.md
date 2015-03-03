@@ -1,0 +1,1 @@
+A ko-grid extensions which displays aggregates such as the sum or average in the table footer.
