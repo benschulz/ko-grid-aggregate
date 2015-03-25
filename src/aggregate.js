@@ -1,6 +1,8 @@
 'use strict';
 
-define(['knockout', 'ko-grid'], function (ko, koGrid) {
+define(['module', 'knockout', 'ko-grid'], function (module, ko, koGrid) {
+    var extensionId = module.id.substr(0, module.id.indexOf('/')).substr(0, module.id.indexOf('/'));
+
     function renderNumber(value) {
         if (Math.abs(value) >= 1)
             return value.toLocaleString();
@@ -12,7 +14,7 @@ define(['knockout', 'ko-grid'], function (ko, koGrid) {
         }
     }
 
-    koGrid.defineExtension(module.id, {
+    koGrid.defineExtension(extensionId, {
         initializer: function (template) {
             template.to('tfoot').prepend('aggregates', [
                 '<tr class="ko-grid-tr" data-bind="indexedRepeat: {',
@@ -115,5 +117,5 @@ define(['knockout', 'ko-grid'], function (ko, koGrid) {
         }
     };
 
-    return koGrid.declareExtensionAlias('aggregate', module.id);
+    return koGrid.declareExtensionAlias('aggregate', extensionId);
 });
