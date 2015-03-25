@@ -17,7 +17,7 @@ define(['module', 'knockout', 'ko-grid'], function (module, ko, koGrid) {
     koGrid.defineExtension(extensionId, {
         initializer: function (template) {
             template.to('tfoot').prepend('aggregates', [
-                '<tr class="ko-grid-tr" data-bind="indexedRepeat: {',
+                '<tr class="ko-grid-tr ko-grid-aggregate-row" data-bind="indexedRepeat: {',
                 '  forEach: extensions.aggregate.__aggregateRows,',
                 '  indexedBy: \'id\',',
                 '  as: \'aggregateRow\'',
