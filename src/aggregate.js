@@ -53,49 +53,60 @@ define(['module', 'knockout', 'ko-grid'], function (module, ko, koGrid) {
 
             // TODO support date and perhaps other types
             var idCounter = 0;
-            var computer = ko.computed(function () {
-                var statistics = {};
-                var rows = grid.data.rows.all();
-                var count = rows.length;
+            var updateAggregates = function () {
+                grid.data.source.streamValues(q => q.filteredBy(grid.data.predicate))
+                    .then(values => {
+                        var statistics = {count: 0};
+                        propertiesOfInterest.forEach(function (p) {
+                            statistics[p] = {'minimum': Number.POSITIVE_INFINITY, 'maximum': Number.NEGATIVE_INFINITY, 'sum': 0};
+                        });
 
-                propertiesOfInterest.forEach(function (p) {
-                    statistics[p] = {'minimum': Number.POSITIVE_INFINITY, 'maximum': Number.NEGATIVE_INFINITY, 'sum': 0};
-                });
+                        return values.reduce(function (_, value) {
+                            ++statistics.count;
 
-                rows.forEach(function (row) {
-                    propertiesOfInterest.forEach(function (p) {
-                        var propertyStatistics = statistics[p];
-                        var value = grid.data.valueSelector(row[p]);
-                        propertyStatistics['minimum'] = Math.min(propertyStatistics['minimum'], value);
-                        propertyStatistics['maximum'] = Math.max(propertyStatistics['maximum'], value);
-                        propertyStatistics['sum'] += value;
+                            propertiesOfInterest.forEach(function (p) {
+                                var propertyStatistics = statistics[p];
+                                var v = grid.data.valueSelector(value[p]);
+                                propertyStatistics['minimum'] = Math.min(propertyStatistics['minimum'], v);
+                                propertyStatistics['maximum'] = Math.max(propertyStatistics['maximum'], v);
+                                propertyStatistics['sum'] += v;
+                            });
+
+                            return _;
+                        }, statistics);
+                    }).then(statistics => {
+                        var count = statistics.count;
+
+                        aggregateRows(bindingValue.map(function (aggregates) {
+                            var row = {id: '' + (++idCounter)};
+
+                            grid.columns.displayed().forEach(function (column) {
+                                var columnId = column.id;
+                                var property = column.property;
+                                var aggregate = aggregates[columnId];
+
+                                if (aggregate) {
+                                    row[columnId] = {
+                                        column: column,
+                                        aggregate: aggregate,
+                                        value: count ? renderNumber(aggregate === 'average' ? statistics[property]['sum'] / count : statistics[property][aggregate]) : 'N/A'
+                                    };
+                                } else {
+                                    row[columnId] = {column: column};
+                                }
+                            });
+
+                            return row;
+                        }));
+
+                        grid.layout.recalculate();
                     });
-                });
+            };
 
-                aggregateRows(bindingValue.map(function (aggregates) {
-                    var row = {id: '' + (++idCounter)};
+            var predicateSubscription = grid.data.predicate.subscribe(updateAggregates);
+            updateAggregates();
 
-                    grid.columns.displayed().forEach(function (column) {
-                        var columnId = column.id;
-                        var property = column.property;
-                        var aggregate = aggregates[columnId];
-
-                        if (aggregate) {
-                            row[columnId] = {
-                                column: column,
-                                aggregate: aggregate,
-                                value: count ? renderNumber(aggregate === 'average' ? statistics[property]['sum'] / count : statistics[property][aggregate]) : 'N/A'
-                            };
-                        } else {
-                            row[columnId] = {column: column};
-                        }
-                    });
-
-                    return row;
-                }));
-            });
-
-            this.dispose = function () { computer.dispose(); };
+            this.dispose = function () { predicateSubscription.dispose(); };
         }
     });
 
