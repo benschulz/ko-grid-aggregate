@@ -7,6 +7,7 @@ module.exports = function (grunt) {
         internalMain: 'aggregate',
 
         shims: {
+            knockout: 'window.ko',
             'ko-grid': 'window.ko.bindingHandlers[\'grid\']'
         }
     }).initialize({
