@@ -1,3 +1,9 @@
+.ko-grid-aggregate-row:first-child .ko-grid-aggregate {
+  border-top-width: 1px;
+}
+.ko-grid-aggregate-row:last-child .ko-grid-aggregate {
+  border-bottom-width: 1px;
+}
 .ko-grid-aggregate {
   text-align: right;
 }

@@ -4,13 +4,14 @@
  */
 ;(function(factory) {
     if (typeof define === 'function' && define['amd'])
-        define(['ko-grid', 'ko-indexed-repeat', 'knockout'], factory);
+        define(['ko-grid', 'knockout', 'ko-data-source', 'ko-indexed-repeat'], factory);
     else
-        window['ko-grid-aggregate'] = factory(window.ko.bindingHandlers['grid']);
-} (function(ko_grid, ko_indexed_repeat, knockout) {
+        window['ko-grid-aggregate'] = factory(window.ko.bindingHandlers['grid'], window.ko);
+} (function(ko_grid, knockout) {
 var ko_grid_aggregate_aggregate, ko_grid_aggregate;
 
-ko_grid_aggregate_aggregate = function (ko, koGrid) {
+ko_grid_aggregate_aggregate = function (module, ko, koGrid) {
+  var extensionId = 'ko-grid-aggregate'.substr(0, 'ko-grid-aggregate'.indexOf('/')).substr(0, 'ko-grid-aggregate'.indexOf('/'));
   function renderNumber(value) {
     if (Math.abs(value) >= 1)
       return value.toLocaleString();
@@ -19,10 +20,10 @@ ko_grid_aggregate_aggregate = function (ko, koGrid) {
       return value.toLocaleString(undefined, { maximumFractionDigits: firstNonZeroFractionDigit + 1 });
     }
   }
-  koGrid.defineExtension('ko-grid-aggregate', {
+  koGrid.defineExtension(extensionId, {
     initializer: function (template) {
       template.to('tfoot').prepend('aggregates', [
-        '<tr class="ko-grid-tr" data-bind="indexedRepeat: {',
+        '<tr class="ko-grid-tr ko-grid-aggregate-row" data-bind="indexedRepeat: {',
         '  forEach: extensions.aggregate.__aggregateRows,',
         '  indexedBy: \'id\',',
         '  as: \'aggregateRow\'',
@@ -55,47 +56,56 @@ ko_grid_aggregate_aggregate = function (ko, koGrid) {
       });
       // TODO support date and perhaps other types
       var idCounter = 0;
-      var computer = ko.computed(function () {
-        var statistics = {};
-        var rows = grid.data.rows.all();
-        var count = rows.length;
-        propertiesOfInterest.forEach(function (p) {
-          statistics[p] = {
-            'minimum': Number.POSITIVE_INFINITY,
-            'maximum': Number.NEGATIVE_INFINITY,
-            'sum': 0
-          };
-        });
-        rows.forEach(function (row) {
+      var updateAggregates = function () {
+        grid.data.source.streamValues(function (q) {
+          return q.filteredBy(grid.data.predicate);
+        }).then(function (values) {
+          var statistics = { count: 0 };
           propertiesOfInterest.forEach(function (p) {
-            var propertyStatistics = statistics[p];
-            var value = grid.data.valueSelector(row[p]);
-            propertyStatistics['minimum'] = Math.min(propertyStatistics['minimum'], value);
-            propertyStatistics['maximum'] = Math.max(propertyStatistics['maximum'], value);
-            propertyStatistics['sum'] += value;
+            statistics[p] = {
+              'minimum': Number.POSITIVE_INFINITY,
+              'maximum': Number.NEGATIVE_INFINITY,
+              'sum': 0
+            };
           });
+          return values.reduce(function (_, value) {
+            ++statistics.count;
+            propertiesOfInterest.forEach(function (p) {
+              var propertyStatistics = statistics[p];
+              var v = grid.data.valueSelector(value[p]);
+              propertyStatistics['minimum'] = Math.min(propertyStatistics['minimum'], v);
+              propertyStatistics['maximum'] = Math.max(propertyStatistics['maximum'], v);
+              propertyStatistics['sum'] += v;
+            });
+            return _;
+          }, statistics);
+        }).then(function (statistics) {
+          var count = statistics.count;
+          aggregateRows(bindingValue.map(function (aggregates) {
+            var row = { id: '' + ++idCounter };
+            grid.columns.displayed().forEach(function (column) {
+              var columnId = column.id;
+              var property = column.property;
+              var aggregate = aggregates[columnId];
+              if (aggregate) {
+                row[columnId] = {
+                  column: column,
+                  aggregate: aggregate,
+                  value: count ? renderNumber(aggregate === 'average' ? statistics[property]['sum'] / count : statistics[property][aggregate]) : 'N/A'
+                };
+              } else {
+                row[columnId] = { column: column };
+              }
+            });
+            return row;
+          }));
+          grid.layout.recalculate();
         });
-        aggregateRows(bindingValue.map(function (aggregates) {
-          var row = { id: '' + ++idCounter };
-          grid.columns.displayed().forEach(function (column) {
-            var columnId = column.id;
-            var property = column.property;
-            var aggregate = aggregates[columnId];
-            if (aggregate) {
-              row[columnId] = {
-                column: column,
-                aggregate: aggregate,
-                value: count ? renderNumber(aggregate === 'average' ? statistics[property]['sum'] / count : statistics[property][aggregate]) : 'N/A'
-              };
-            } else {
-              row[columnId] = { column: column };
-            }
-          });
-          return row;
-        }));
-      });
+      };
+      var predicateSubscription = grid.data.predicate.subscribe(updateAggregates);
+      updateAggregates();
       this.dispose = function () {
-        computer.dispose();
+        predicateSubscription.dispose();
       };
     }
   });
@@ -112,8 +122,8 @@ ko_grid_aggregate_aggregate = function (ko, koGrid) {
       element.firstChild.nodeValue = value.aggregate ? value.value : '';
     }
   };
-  return koGrid.declareExtensionAlias('aggregate', 'ko-grid-aggregate');
-}(knockout, ko_grid);
+  return koGrid.declareExtensionAlias('aggregate', extensionId);
+}({}, knockout, ko_grid);
 ko_grid_aggregate = function (main) {
   return main;
 }(ko_grid_aggregate_aggregate);return ko_grid_aggregate;
