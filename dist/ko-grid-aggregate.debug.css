@@ -1,0 +1,21 @@
+.ko-grid-aggregate-row:first-child .ko-grid-aggregate {
+  border-top-width: 1px;
+}
+.ko-grid-aggregate-row:last-child .ko-grid-aggregate {
+  border-bottom-width: 1px;
+}
+.ko-grid-aggregate {
+  text-align: right;
+}
+.ko-grid-aggregate.sum:before {
+  content: "\2211\0020";
+}
+.ko-grid-aggregate.average:before {
+  content: "\2205\0020";
+}
+.ko-grid-aggregate.minimum:before {
+  content: "Min\0020";
+}
+.ko-grid-aggregate.maximum:before {
+  content: "Max\0020";
+}
