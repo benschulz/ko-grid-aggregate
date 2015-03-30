@@ -51,64 +51,69 @@ define(['module', 'knockout', 'ko-grid'], function (module, ko, koGrid) {
                 });
             });
 
-            // TODO support date and perhaps other types
+            var computeStatistics = config['statisticsComputer'] || computeStatisticsFromValuesStream;
+
             var idCounter = 0;
-            var updateAggregates = function () {
-                grid.data.source.streamValues(q => q.filteredBy(grid.data.predicate))
-                    .then(values => {
-                        var statistics = {count: 0};
-                        propertiesOfInterest.forEach(function (p) {
-                            statistics[p] = {'minimum': Number.POSITIVE_INFINITY, 'maximum': Number.NEGATIVE_INFINITY, 'sum': 0};
+            var computer = ko.computed(() => {
+                grid.data.predicate();
+                grid.data.view.values();
+
+                return computeStatistics(grid, propertiesOfInterest).then(statistics => {
+                    var count = statistics.count;
+
+                    aggregateRows(bindingValue.map(function (aggregates) {
+                        var row = {id: '' + (++idCounter)};
+
+                        grid.columns.displayed().forEach(function (column) {
+                            var columnId = column.id;
+                            var property = column.property;
+                            var aggregate = aggregates[columnId];
+
+                            if (aggregate) {
+                                // TODO support date and perhaps other types
+                                row[columnId] = {
+                                    column: column,
+                                    aggregate: aggregate,
+                                    value: count ? renderNumber(aggregate === 'average' ? statistics[property]['sum'] / count : statistics[property][aggregate]) : 'N/A'
+                                };
+                            } else {
+                                row[columnId] = {column: column};
+                            }
                         });
 
-                        return values.reduce(function (_, value) {
-                            ++statistics.count;
+                        return row;
+                    }));
 
-                            propertiesOfInterest.forEach(function (p) {
-                                var propertyStatistics = statistics[p];
-                                var v = grid.data.valueSelector(value[p]);
-                                propertyStatistics['minimum'] = Math.min(propertyStatistics['minimum'], v);
-                                propertyStatistics['maximum'] = Math.max(propertyStatistics['maximum'], v);
-                                propertyStatistics['sum'] += v;
-                            });
+                    grid.layout.recalculate();
+                });
+            });
 
-                            return _;
-                        }, statistics);
-                    }).then(statistics => {
-                        var count = statistics.count;
-
-                        aggregateRows(bindingValue.map(function (aggregates) {
-                            var row = {id: '' + (++idCounter)};
-
-                            grid.columns.displayed().forEach(function (column) {
-                                var columnId = column.id;
-                                var property = column.property;
-                                var aggregate = aggregates[columnId];
-
-                                if (aggregate) {
-                                    row[columnId] = {
-                                        column: column,
-                                        aggregate: aggregate,
-                                        value: count ? renderNumber(aggregate === 'average' ? statistics[property]['sum'] / count : statistics[property][aggregate]) : 'N/A'
-                                    };
-                                } else {
-                                    row[columnId] = {column: column};
-                                }
-                            });
-
-                            return row;
-                        }));
-
-                        grid.layout.recalculate();
-                    });
-            };
-
-            var predicateSubscription = grid.data.predicate.subscribe(updateAggregates);
-            updateAggregates();
-
-            this.dispose = function () { predicateSubscription.dispose(); };
+            this.dispose = function () { computer.dispose(); };
         }
     });
+
+    var computeStatisticsFromValuesStream = (grid, propertiesOfInterest) => grid.data.source
+        .streamValues(q => q.filteredBy(grid.data.predicate))
+        .then(values => {
+            var statistics = {count: 0};
+            propertiesOfInterest.forEach(function (p) {
+                statistics[p] = {'minimum': Number.POSITIVE_INFINITY, 'maximum': Number.NEGATIVE_INFINITY, 'sum': 0};
+            });
+
+            return values.reduce(function (_, value) {
+                ++statistics.count;
+
+                propertiesOfInterest.forEach(function (p) {
+                    var propertyStatistics = statistics[p];
+                    var v = grid.data.valueSelector(value[p]);
+                    propertyStatistics['minimum'] = Math.min(propertyStatistics['minimum'], v);
+                    propertyStatistics['maximum'] = Math.max(propertyStatistics['maximum'], v);
+                    propertyStatistics['sum'] += v;
+                });
+
+                return _;
+            }, statistics);
+        });
 
     ko.bindingHandlers['__gridAggregate'] = {
         'init': function (element) {
